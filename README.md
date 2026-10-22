@@ -6,6 +6,7 @@ Plugin WooCommerce para IVB (profesional.ivbwellness.com). Sustituye al snippet 
 - **WooCommerce > Reservas**: listado por cliente (pedidos, unidades, total, pagados/pendientes, aviso enviado), exportación CSV, **Abrir venta y avisar**, reenviar aviso y volver al modo reserva.
 - Al abrir la venta el producto es normal y se envía, escalonado (Action Scheduler), el email «Reserva: pago abierto» con el enlace de pago de cada pedido pendiente. Editable en WooCommerce > Ajustes > Emails.
 - **SEPA:** los pedidos cuya pasarela es SEPA (por defecto solo `cod`, que en IVB es «Domiciliación SEPA») no reciben enlace de pago: al abrir la venta pasan a **Procesando** y WooCommerce envía el email normal de pedido en proceso. Las pasarelas se configuran en WooCommerce > Reservas.
+- **Cancelación:** el cliente no puede cancelar una reserva pendiente: WooCommerce no la ofrece ni la acepta, el botón «Cancelar» aparece desactivado y se muestra «Si quieres cancelar tu pedido, ponte en contacto con tu comercial». Solo se cancela desde el admin.
 - **Permisos:** ver el listado y exportar el CSV requiere gestionar WooCommerce; **abrir la venta, avisar, volver al modo reserva y cambiar ajustes solo pueden hacerlo administradores**.
 
 ## Instalación

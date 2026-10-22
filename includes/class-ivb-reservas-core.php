@@ -22,6 +22,9 @@ class IVB_Reservas_Core {
 		add_filter( 'woocommerce_cancel_unpaid_order', array( __CLASS__, 'keep_unpaid' ), 10, 2 );
 		add_filter( 'woocommerce_thankyou_order_received_text', array( __CLASS__, 'thankyou_text' ), 10, 2 );
 		add_filter( 'woocommerce_my_account_my_orders_actions', array( __CLASS__, 'account_actions' ), 20, 2 );
+		add_filter( 'woocommerce_valid_order_statuses_for_cancel', array( __CLASS__, 'valid_cancel_statuses' ), 10, 2 );
+		add_action( 'woocommerce_view_order', array( __CLASS__, 'view_order_note' ), 1 );
+		add_action( 'woocommerce_after_account_orders', array( __CLASS__, 'orders_note' ) );
 		add_action( 'wp_head', array( __CLASS__, 'css' ) );
 	}
 
@@ -147,7 +150,10 @@ class IVB_Reservas_Core {
 	}
 
 	public static function account_actions( $actions, $order ) {
-		if ( ! self::is_open() && self::is_reservation( $order ) && $order->has_status( 'pending' ) ) {
+		if ( ! self::is_reservation( $order ) || ! $order->has_status( 'pending' ) ) {
+			return $actions;
+		}
+		if ( ! self::is_open() ) {
 			$actions = array(
 				'ivb-pay-disabled' => array(
 					'url'  => '#',
@@ -155,7 +161,51 @@ class IVB_Reservas_Core {
 				),
 			) + $actions;
 		}
+		// El cliente no puede cancelar una reserva: botón visible pero desactivado.
+		$actions['ivb-cancel-disabled'] = array(
+			'url'  => '#',
+			'name' => __( 'Cancel', 'woocommerce' ),
+		);
 		return $actions;
+	}
+
+	/** Mensaje que se muestra al cliente cuando no puede cancelar una reserva. */
+	public static function cancel_text() {
+		return 'Las reservas no se pueden cancelar desde la web. Si quieres cancelar tu pedido, ponte en contacto con tu comercial.';
+	}
+
+	/** Las reservas no se pueden cancelar desde Mi cuenta: sin estados válidos, WooCommerce ni ofrece ni acepta la cancelación del cliente. */
+	public static function valid_cancel_statuses( $statuses, $order = null ) {
+		if ( $order && self::is_reservation( $order ) && $order->has_status( 'pending' ) ) {
+			return array();
+		}
+		return $statuses;
+	}
+
+	/** Aviso en la página del pedido (Mi cuenta > Pedidos > Ver). */
+	public static function view_order_note( $order_id ) {
+		$order = wc_get_order( $order_id );
+		if ( $order && self::is_reservation( $order ) && $order->has_status( 'pending' ) ) {
+			echo '<p class="woocommerce-info ivb-reserva-cancel-note">' . esc_html( self::cancel_text() ) . '</p>';
+		}
+	}
+
+	/** Aviso bajo la lista de pedidos si el cliente tiene alguna reserva pendiente. */
+	public static function orders_note() {
+		if ( ! is_user_logged_in() ) {
+			return;
+		}
+		$orders = wc_get_orders( array(
+			'customer_id' => get_current_user_id(),
+			'status'      => 'pending',
+			'limit'       => 50,
+		) );
+		foreach ( $orders as $order ) {
+			if ( self::is_reservation( $order ) ) {
+				echo '<p class="woocommerce-info ivb-reserva-cancel-note">' . esc_html( self::cancel_text() ) . '</p>';
+				return;
+			}
+		}
 	}
 
 	public static function css() {
@@ -165,7 +215,7 @@ class IVB_Reservas_Core {
 		echo '<style id="ivb-reservas-css">'
 			. '.woocommerce-orders-table__cell-order-actions{text-align:right}'
 			. '.woocommerce-orders-table__cell-order-actions .button{display:inline-block;margin:0 0 8px 8px}'
-			. '.woocommerce-orders-table__cell-order-actions .button.ivb-pay-disabled{opacity:.4;cursor:not-allowed;pointer-events:none;filter:grayscale(1)}'
+			. '.woocommerce-orders-table__cell-order-actions .button.ivb-pay-disabled,.woocommerce-orders-table__cell-order-actions .button.ivb-cancel-disabled{opacity:.4;cursor:not-allowed;pointer-events:none;filter:grayscale(1)}'
 			. '</style>';
 	}
 }
