@@ -12,6 +12,11 @@ class IVB_Reservas_Admin {
 	const NOTICE = 'ivb_reservas_send_notice';
 	const AVISADO = '_ivb_reserva_avisado';
 
+	/** Abrir/cerrar la venta, avisar y cambiar ajustes: solo administradores (no gestores de la tienda). */
+	public static function can_open_sales() {
+		return current_user_can( 'manage_options' );
+	}
+
 	public static function init() {
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
 		add_action( 'admin_post_ivb_reservas_toggle', array( __CLASS__, 'handle_toggle' ) );
@@ -78,14 +83,21 @@ class IVB_Reservas_Admin {
 		$t_orders   = 0;
 		$t_units    = 0;
 		$t_pending  = 0;
+		$t_sepa     = 0;
 		$t_total    = 0.0;
 		foreach ( $rows as $r ) {
 			$t_orders  += count( $r['orders'] );
 			$t_units   += $r['units'];
 			$t_pending += $r['pending'];
 			$t_total   += $r['total'];
+			foreach ( $r['orders'] as $o ) {
+				if ( $o->has_status( 'pending' ) && IVB_Reservas_Core::is_sepa( $o ) ) {
+					$t_sepa++;
+				}
+			}
 		}
-		$post = admin_url( 'admin-post.php' );
+		$is_admin = self::can_open_sales();
+		$post     = admin_url( 'admin-post.php' );
 		?>
 		<div class="wrap">
 			<h1>Reservas: <?php echo esc_html( IVB_Reservas_Core::product_name() ); ?></h1>
@@ -109,8 +121,10 @@ class IVB_Reservas_Admin {
 			<p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
 				<a class="button" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'ivb_reservas_csv', $post ), self::NONCE ) ); ?>">Exportar CSV</a>
 
-				<?php if ( ! $open ) : ?>
-					<form method="post" action="<?php echo esc_url( $post ); ?>" onsubmit="return confirm('¿Abrir la venta? El producto pasará a ser normal y se enviará un email de pago a los <?php echo (int) $t_pending; ?> pedidos pendientes.');">
+				<?php if ( ! $is_admin ) : ?>
+					<span class="description">Solo un administrador puede abrir la venta y enviar los avisos.</span>
+				<?php elseif ( ! $open ) : ?>
+					<form method="post" action="<?php echo esc_url( $post ); ?>" onsubmit="return confirm('¿Abrir la venta? El producto pasará a ser normal. De los <?php echo (int) $t_pending; ?> pedidos pendientes, <?php echo (int) $t_sepa; ?> con SEPA pasarán a «Procesando» (con el email normal de WooCommerce) y el resto (<?php echo (int) ( $t_pending - $t_sepa ); ?>) recibirán el email con el enlace de pago.');">
 						<input type="hidden" name="action" value="ivb_reservas_toggle">
 						<input type="hidden" name="mode" value="open">
 						<?php wp_nonce_field( self::NONCE ); ?>
@@ -173,22 +187,34 @@ class IVB_Reservas_Admin {
 				</tbody>
 			</table>
 
+			<?php if ( $is_admin ) : ?>
 			<form method="post" action="<?php echo esc_url( $post ); ?>" style="margin-top:24px">
 				<input type="hidden" name="action" value="ivb_reservas_toggle">
 				<input type="hidden" name="mode" value="save">
 				<?php wp_nonce_field( self::NONCE ); ?>
-				<label>ID del producto de reserva:
-					<input type="number" name="product_id" value="<?php echo (int) IVB_Reservas_Core::product_id(); ?>" style="width:110px">
-				</label>
+				<p>
+					<label>ID del producto de reserva:
+						<input type="number" name="product_id" value="<?php echo (int) IVB_Reservas_Core::product_id(); ?>" style="width:110px">
+					</label>
+				</p>
+				<p>
+					<label>Pasarelas SEPA (IDs separados por coma):
+						<input type="text" name="sepa_gateways" value="<?php echo esc_attr( implode( ',', IVB_Reservas_Core::sepa_gateways() ) ); ?>" style="width:260px">
+					</label>
+					<span class="description">Al abrir la venta, estos pedidos pasan a «Procesando» en vez de recibir el enlace de pago. También cuenta como SEPA si el título del método de pago contiene «SEPA».</span>
+				</p>
 				<button class="button">Guardar</button>
 			</form>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
 
-	private static function check_request() {
-		if ( ! current_user_can( 'manage_woocommerce' ) ) {
-			wp_die( 'Sin permisos.' );
+	/** $admin_only: acciones que cambian el estado de la venta o envían avisos exigen administrador. */
+	private static function check_request( $admin_only = false ) {
+		$allowed = $admin_only ? self::can_open_sales() : current_user_can( 'manage_woocommerce' );
+		if ( ! $allowed ) {
+			wp_die( 'Solo un administrador puede hacer esto.', '', array( 'response' => 403 ) );
 		}
 		check_admin_referer( self::NONCE );
 	}
@@ -229,12 +255,16 @@ class IVB_Reservas_Admin {
 	}
 
 	public static function handle_toggle() {
-		self::check_request();
+		self::check_request( true );
 		$mode = isset( $_POST['mode'] ) ? sanitize_key( $_POST['mode'] ) : '';
 
 		if ( 'save' === $mode ) {
 			update_option( IVB_Reservas_Core::OPT_PRODUCT, absint( $_POST['product_id'] ?? 0 ) );
-			self::back( 'Producto guardado.' );
+			if ( isset( $_POST['sepa_gateways'] ) ) {
+				$ids = array_filter( array_map( 'sanitize_key', explode( ',', wp_unslash( $_POST['sepa_gateways'] ) ) ) );
+				update_option( IVB_Reservas_Core::OPT_SEPA, implode( ',', $ids ) );
+			}
+			self::back( 'Ajustes guardados.' );
 		}
 		if ( 'close' === $mode ) {
 			update_option( IVB_Reservas_Core::OPT_OPEN, 'no' );
@@ -242,14 +272,25 @@ class IVB_Reservas_Admin {
 		}
 		if ( 'open' === $mode ) {
 			update_option( IVB_Reservas_Core::OPT_OPEN, 'yes' );
-			$n = self::queue_notices( self::pending_ids( true ) );
-			self::back( sprintf( 'Venta abierta. %d avisos de pago programados (se envían escalonados).', $n ) );
+			$ids  = self::pending_ids( true );
+			$sepa = 0;
+			foreach ( $ids as $id ) {
+				if ( IVB_Reservas_Core::is_sepa( wc_get_order( $id ) ) ) {
+					$sepa++;
+				}
+			}
+			self::queue_notices( $ids );
+			self::back( sprintf(
+				'Venta abierta. %d pedidos SEPA pasarán a «Procesando» y %d recibirán el aviso de pago (se envían escalonados).',
+				$sepa,
+				count( $ids ) - $sepa
+			) );
 		}
 		self::back( '' );
 	}
 
 	public static function handle_notify() {
-		self::check_request();
+		self::check_request( true );
 		if ( ! IVB_Reservas_Core::is_open() ) {
 			self::back( 'Primero hay que abrir la venta.' );
 		}
@@ -261,6 +302,14 @@ class IVB_Reservas_Admin {
 	public static function send_notice( $order_id ) {
 		$order = wc_get_order( $order_id );
 		if ( ! $order || ! $order->has_status( 'pending' ) || ! IVB_Reservas_Core::is_open() ) {
+			return;
+		}
+		// SEPA: no hay nada que pagar ahora (se cobra por domiciliación). Pasa a "Procesando"
+		// y WooCommerce envía al cliente el email normal de pedido en proceso.
+		if ( IVB_Reservas_Core::is_sepa( $order ) ) {
+			$order->update_status( 'processing', 'Venta abierta: reserva con SEPA, pasa a Procesando.' );
+			$order->update_meta_data( self::AVISADO, time() );
+			$order->save();
 			return;
 		}
 		$emails = WC()->mailer()->get_emails();

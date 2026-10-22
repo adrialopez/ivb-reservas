@@ -13,6 +13,7 @@ class IVB_Reservas_Core {
 	const OPT_PRODUCT = 'ivb_reservas_product_id';
 	const OPT_OPEN    = 'ivb_reservas_abierta';
 	const META        = '_ivb_reserva';
+	const OPT_SEPA    = 'ivb_reservas_sepa_gateways';
 
 	public static function init() {
 		add_action( 'woocommerce_check_cart_items', array( __CLASS__, 'check_cart' ) );
@@ -35,6 +36,23 @@ class IVB_Reservas_Core {
 	public static function product_name() {
 		$product = wc_get_product( self::product_id() );
 		return $product ? $product->get_name() : 'producto de reserva';
+	}
+
+	/** IDs de pasarela que cuentan como SEPA (en IVB, "cod" se llama «Domiciliación SEPA»). */
+	public static function sepa_gateways() {
+		$raw = get_option( self::OPT_SEPA, 'cod,stripe_sepa_debit' );
+		return array_values( array_filter( array_map( 'trim', explode( ',', strtolower( (string) $raw ) ) ) ) );
+	}
+
+	/** Un pedido es SEPA si su pasarela está en la lista, o su título de método de pago dice "SEPA". */
+	public static function is_sepa( $order ) {
+		if ( ! $order ) {
+			return false;
+		}
+		if ( in_array( strtolower( (string) $order->get_payment_method() ), self::sepa_gateways(), true ) ) {
+			return true;
+		}
+		return false !== stripos( (string) $order->get_payment_method_title(), 'sepa' );
 	}
 
 	public static function is_reservation( $order ) {
