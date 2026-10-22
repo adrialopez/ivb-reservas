@@ -38,21 +38,15 @@ class IVB_Reservas_Core {
 		return $product ? $product->get_name() : 'producto de reserva';
 	}
 
-	/** IDs de pasarela que cuentan como SEPA (en IVB, "cod" se llama «Domiciliación SEPA»). */
+	/** IDs de pasarela que cuentan como SEPA. En IVB solo "cod" (se llama «Domiciliación SEPA»). */
 	public static function sepa_gateways() {
-		$raw = get_option( self::OPT_SEPA, 'cod,stripe_sepa_debit' );
+		$raw = get_option( self::OPT_SEPA, 'cod' );
 		return array_values( array_filter( array_map( 'trim', explode( ',', strtolower( (string) $raw ) ) ) ) );
 	}
 
-	/** Un pedido es SEPA si su pasarela está en la lista, o su título de método de pago dice "SEPA". */
+	/** Un pedido es SEPA solo si su pasarela está en la lista (no se mira el título). */
 	public static function is_sepa( $order ) {
-		if ( ! $order ) {
-			return false;
-		}
-		if ( in_array( strtolower( (string) $order->get_payment_method() ), self::sepa_gateways(), true ) ) {
-			return true;
-		}
-		return false !== stripos( (string) $order->get_payment_method_title(), 'sepa' );
+		return $order && in_array( strtolower( (string) $order->get_payment_method() ), self::sepa_gateways(), true );
 	}
 
 	public static function is_reservation( $order ) {

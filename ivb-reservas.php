@@ -2,7 +2,7 @@
 /**
  * Plugin Name: IVB Reservas
  * Description: Reserva de un producto en WooCommerce (compra solo, sin pago, pedido pendiente), listado de reservas y aviso por email al abrir la venta.
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: Adrià López
  * Author URI: https://adria-lopez.com
  * Requires Plugins: woocommerce
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'IVB_RESERVAS_VERSION', '1.1.0' );
+define( 'IVB_RESERVAS_VERSION', '1.1.1' );
 define( 'IVB_RESERVAS_DIR', plugin_dir_path( __FILE__ ) );
 
 // Compatibilidad con almacenamiento de pedidos de alto rendimiento (HPOS).

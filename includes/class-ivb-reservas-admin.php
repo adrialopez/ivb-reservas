@@ -201,7 +201,7 @@ class IVB_Reservas_Admin {
 					<label>Pasarelas SEPA (IDs separados por coma):
 						<input type="text" name="sepa_gateways" value="<?php echo esc_attr( implode( ',', IVB_Reservas_Core::sepa_gateways() ) ); ?>" style="width:260px">
 					</label>
-					<span class="description">Al abrir la venta, estos pedidos pasan a «Procesando» en vez de recibir el enlace de pago. También cuenta como SEPA si el título del método de pago contiene «SEPA».</span>
+					<span class="description">Al abrir la venta, estos pedidos pasan a «Procesando» en vez de recibir el enlace de pago.</span>
 				</p>
 				<button class="button">Guardar</button>
 			</form>
