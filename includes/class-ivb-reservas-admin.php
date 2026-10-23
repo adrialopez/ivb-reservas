@@ -111,6 +111,27 @@ class IVB_Reservas_Admin {
 				<strong style="color:<?php echo $open ? '#2e7d32' : '#b26a00'; ?>"><?php echo $open ? 'ABIERTA (producto normal)' : 'CERRADA (solo reservas)'; ?></strong>
 			</p>
 
+			<?php
+			$limit = IVB_Reservas_Core::limit_for();
+			if ( $limit > 0 ) :
+				$reserved = IVB_Reservas_Core::reserved_units( true );
+				$left     = max( 0, $limit - $reserved );
+				$pstatus  = get_post_status( IVB_Reservas_Core::product_id() );
+				?>
+				<p>
+					Límite de reservas: <strong><?php echo (int) $reserved; ?></strong> de <strong><?php echo (int) $limit; ?></strong> unidades
+					(quedan <strong><?php echo (int) $left; ?></strong>).
+					<?php if ( $open ) : ?>
+						<span class="description">Con la venta abierta el límite ya no se aplica.</span>
+					<?php elseif ( $left <= 0 ) : ?>
+						<strong style="color:#b32d2e">AGOTADO</strong>
+						<?php if ( 'publish' !== $pstatus ) : ?>
+							— el producto está en «<?php echo esc_html( (string) $pstatus ); ?>» y no se puede comprar. Para volver a venderlo, sube el máximo y publícalo desde su ficha.
+						<?php endif; ?>
+					<?php endif; ?>
+				</p>
+			<?php endif; ?>
+
 			<p>
 				<strong><?php echo (int) count( $rows ); ?></strong> clientes ·
 				<strong><?php echo (int) $t_orders; ?></strong> pedidos (<?php echo (int) $t_pending; ?> pendientes de pago) ·
@@ -198,6 +219,12 @@ class IVB_Reservas_Admin {
 					</label>
 				</p>
 				<p>
+					<label>Máximo de reservas (unidades; 0 = sin límite):
+						<input type="number" min="0" name="max_reservas" value="<?php echo (int) IVB_Reservas_Core::limit_for(); ?>" style="width:110px">
+					</label>
+					<span class="description">Al llegar al máximo no se puede terminar ningún pedido de reserva y el producto pasa a borrador, así que desaparece de los carritos. Con la venta abierta el límite no se aplica.</span>
+				</p>
+				<p>
 					<label>Pasarelas SEPA (IDs separados por coma):
 						<input type="text" name="sepa_gateways" value="<?php echo esc_attr( implode( ',', IVB_Reservas_Core::sepa_gateways() ) ); ?>" style="width:260px">
 					</label>
@@ -260,6 +287,13 @@ class IVB_Reservas_Admin {
 
 		if ( 'save' === $mode ) {
 			update_option( IVB_Reservas_Core::OPT_PRODUCT, absint( $_POST['product_id'] ?? 0 ) );
+			if ( isset( $_POST['max_reservas'] ) ) {
+				IVB_Reservas_Core::set_limit( IVB_Reservas_Core::product_id(), absint( $_POST['max_reservas'] ) );
+				// Si al fijar el máximo ya está alcanzado, se cierra el producto
+				if ( IVB_Reservas_Core::is_sold_out( true ) ) {
+					IVB_Reservas_Core::close_product( IVB_Reservas_Core::product_id() );
+				}
+			}
 			if ( isset( $_POST['sepa_gateways'] ) ) {
 				$ids = array_filter( array_map( 'sanitize_key', explode( ',', wp_unslash( $_POST['sepa_gateways'] ) ) ) );
 				update_option( IVB_Reservas_Core::OPT_SEPA, implode( ',', $ids ) );
